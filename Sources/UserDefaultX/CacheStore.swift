@@ -1,9 +1,13 @@
 import Foundation
 import Synchronization
 
-struct CacheStore: ~Copyable, Sendable {
+final class CacheStore: Sendable {
 
-    private let storage: Mutex<[String: any Sendable]> = .init([:])
+    private struct Box: @unchecked Sendable {
+        let value: Any
+    }
+
+    private let storage: Mutex<[String: Box]> = .init([:])
     private let stats: Mutex<MutableStatistics> = .init(MutableStatistics())
 
     private struct MutableStatistics: Sendable {
@@ -14,19 +18,19 @@ struct CacheStore: ~Copyable, Sendable {
 
     // MARK: - Sentinel
 
-    static let nilSentinel: NSNull = NSNull()
+    private static let nilSentinel = NSNull()
 
     // MARK: - Read
 
     func get(_ key: String) -> (hit: Bool, value: Any?) {
         storage.withLock { cache in
-            guard let cached = cache[key] else {
+            guard let box = cache[key] else {
                 stats.withLock { $0.misses += 1 }
                 return (hit: false, value: nil)
             }
             stats.withLock { $0.hits += 1 }
-            if cached is NSNull { return (hit: true, value: nil) }
-            return (hit: true, value: cached)
+            if box.value is NSNull { return (hit: true, value: nil) }
+            return (hit: true, value: box.value)
         }
     }
 
@@ -36,13 +40,12 @@ struct CacheStore: ~Copyable, Sendable {
     @discardableResult
     func set(_ value: Any?, forKey key: String) -> Bool {
         storage.withLock { cache in
-            let sendable = value as (any Sendable)?
-            let boxed: any Sendable = sendable ?? Self.nilSentinel
-            if let existing = cache[key], Self.isEqual(existing, boxed) {
+            let raw: Any = value ?? Self.nilSentinel
+            if let existing = cache[key], Self.isEqual(existing.value, raw) {
                 stats.withLock { $0.skippedWrites += 1 }
                 return false
             }
-            cache[key] = boxed
+            cache[key] = Box(value: raw)
             return true
         }
     }
@@ -50,7 +53,7 @@ struct CacheStore: ~Copyable, Sendable {
     // MARK: - Remove
 
     func remove(_ key: String) {
-        storage.withLock { $0[key] = Self.nilSentinel }
+        storage.withLock { $0[key] = Box(value: Self.nilSentinel) }
     }
 
     // MARK: - Invalidation
@@ -60,9 +63,7 @@ struct CacheStore: ~Copyable, Sendable {
     }
 
     func invalidateAll() {
-        storage.withLock { cache in
-            cache.removeAll()
-        }
+        storage.withLock { $0.removeAll() }
     }
 
     // MARK: - Statistics
@@ -83,7 +84,7 @@ struct CacheStore: ~Copyable, Sendable {
 
     // MARK: - Equality
 
-    private static func isEqual(_ lhs: any Sendable, _ rhs: any Sendable) -> Bool {
+    private static func isEqual(_ lhs: Any, _ rhs: Any) -> Bool {
         if lhs is NSNull, rhs is NSNull { return true }
         guard let lobj = lhs as? NSObject, let robj = rhs as? NSObject else { return false }
         return lobj.isEqual(robj)

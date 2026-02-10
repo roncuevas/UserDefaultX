@@ -4,8 +4,8 @@ public final class UserDefaultX: @unchecked Sendable {
 
     public static let standard = UserDefaultX()
 
-    private let defaults: UserDefaults
-    private let cache = CacheStore()
+    let defaults: UserDefaults
+    let cache = CacheStore()
     private var observer: (any NSObjectProtocol)?
 
     // MARK: - Init

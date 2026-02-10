@@ -9,7 +9,7 @@ extension UserDefaultX {
             return try? JSONDecoder().decode(T.self, from: data)
         }
         guard let data = defaults.data(forKey: key) else {
-            cache.set(nil, forKey: key)
+            cache.set(Optional<Data>.none, forKey: key)
             return nil
         }
         cache.set(data, forKey: key)
