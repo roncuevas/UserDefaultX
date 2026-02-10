@@ -213,13 +213,28 @@ struct UserDefaultXTests {
         defer { cleanup(defaults) }
 
         sut.set("cached", forKey: "k")
-        defaults.set("updated", forKey: "k") // change behind our back
+        sut.resetStatistics()
 
-        // Still returns cached value
-        #expect(sut.string(forKey: "k") == "cached")
-
+        // Invalidate the cache for this key
         sut.invalidateCache(forKey: "k")
-        #expect(sut.string(forKey: "k") == "updated")
+
+        // Next read should be a cache miss → re-read from defaults
+        let value = sut.string(forKey: "k")
+        #expect(value == "cached") // still "cached" in defaults
+        #expect(sut.statistics.misses == 1)
+    }
+
+    @Test func externalWriteInvalidatesCacheViaNotification() {
+        let (sut, defaults) = makeSUT()
+        defer { cleanup(defaults) }
+
+        sut.set("original", forKey: "k")
+
+        // External write triggers didChangeNotification → cache invalidated
+        defaults.set("external", forKey: "k")
+
+        // Next read should pick up the external value
+        #expect(sut.string(forKey: "k") == "external")
     }
 
     @Test func invalidateAllClearsEntireCache() {

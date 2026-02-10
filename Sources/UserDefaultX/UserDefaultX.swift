@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 public final class UserDefaultX: @unchecked Sendable {
 
@@ -7,6 +8,7 @@ public final class UserDefaultX: @unchecked Sendable {
     let defaults: UserDefaults
     let cache = CacheStore()
     private var observer: (any NSObjectProtocol)?
+    let pendingWrites: Mutex<Int> = .init(0)
 
     // MARK: - Init
 
@@ -17,7 +19,17 @@ public final class UserDefaultX: @unchecked Sendable {
             object: defaults,
             queue: nil
         ) { [weak self] _ in
-            self?.invalidateCache()
+            guard let self else { return }
+            let shouldInvalidate = pendingWrites.withLock { count -> Bool in
+                if count > 0 {
+                    count -= 1
+                    return false
+                }
+                return true
+            }
+            if shouldInvalidate {
+                invalidateCache()
+            }
         }
     }
 
@@ -108,6 +120,7 @@ public final class UserDefaultX: @unchecked Sendable {
     // MARK: - Remove
 
     public func removeObject(forKey key: String) {
+        pendingWrites.withLock { $0 += 1 }
         cache.remove(key)
         defaults.removeObject(forKey: key)
     }
@@ -150,6 +163,7 @@ public final class UserDefaultX: @unchecked Sendable {
 
     private func writeThrough(_ value: Any?, forKey key: String, persist: (UserDefaults) -> Void) {
         guard cache.set(value, forKey: key) else { return }
+        pendingWrites.withLock { $0 += 1 }
         persist(defaults)
     }
 }

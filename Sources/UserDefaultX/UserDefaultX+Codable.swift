@@ -23,6 +23,7 @@ extension UserDefaultX {
         }
         guard let data = try? JSONEncoder().encode(value) else { return }
         guard cache.set(data, forKey: key) else { return }
+        pendingWrites.withLock { $0 += 1 }
         defaults.set(data, forKey: key)
     }
 }

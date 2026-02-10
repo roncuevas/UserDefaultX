@@ -30,7 +30,7 @@ struct ThreadSafetyTests {
         }
 
         // If we reach here without crashing, the test passes
-        #expect(true)
+        #expect(Bool(true))
     }
 
     @Test func concurrentReadsDoNotCrash() async {
@@ -49,7 +49,7 @@ struct ThreadSafetyTests {
             }
         }
 
-        #expect(true)
+        #expect(Bool(true))
     }
 
     @Test func concurrentReadWriteMix() async {
@@ -68,7 +68,7 @@ struct ThreadSafetyTests {
             }
         }
 
-        #expect(true)
+        #expect(Bool(true))
     }
 
     @Test func concurrentInvalidation() async {
@@ -87,7 +87,7 @@ struct ThreadSafetyTests {
             }
         }
 
-        #expect(true)
+        #expect(Bool(true))
     }
 
     @Test func concurrentStatisticsAccess() async {
@@ -106,6 +106,6 @@ struct ThreadSafetyTests {
             }
         }
 
-        #expect(true)
+        #expect(Bool(true))
     }
 }
