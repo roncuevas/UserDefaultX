@@ -1,7 +1,7 @@
 import Foundation
 import Synchronization
 
-struct CacheStore: Sendable {
+struct CacheStore: ~Copyable, Sendable {
 
     private let storage: Mutex<[String: any Sendable]> = .init([:])
     private let stats: Mutex<MutableStatistics> = .init(MutableStatistics())
@@ -36,7 +36,8 @@ struct CacheStore: Sendable {
     @discardableResult
     func set(_ value: Any?, forKey key: String) -> Bool {
         storage.withLock { cache in
-            let boxed: any Sendable = (value as? (any Sendable)) ?? Self.nilSentinel
+            let sendable = value as (any Sendable)?
+            let boxed: any Sendable = sendable ?? Self.nilSentinel
             if let existing = cache[key], Self.isEqual(existing, boxed) {
                 stats.withLock { $0.skippedWrites += 1 }
                 return false
@@ -49,17 +50,13 @@ struct CacheStore: Sendable {
     // MARK: - Remove
 
     func remove(_ key: String) {
-        storage.withLock { cache in
-            cache[key] = Self.nilSentinel
-        }
+        storage.withLock { $0[key] = Self.nilSentinel }
     }
 
     // MARK: - Invalidation
 
     func invalidate(_ key: String) {
-        storage.withLock { cache in
-            cache.removeValue(forKey: key)
-        }
+        storage.withLock { _ = $0.removeValue(forKey: key) }
     }
 
     func invalidateAll() {
