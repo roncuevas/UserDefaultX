@@ -1,6 +1,12 @@
 import Foundation
 import Synchronization
 
+// Safety: @unchecked Sendable is safe because all stored properties are either
+// immutable or internally synchronized:
+//  - `defaults` is `let` (UserDefaults is thread-safe)
+//  - `cache` is `let` referencing a `Sendable` CacheStore
+//  - `pendingWrites` is `let` wrapping a Mutex
+//  - `observer` is set once in `init`, read once in `deinit` — no concurrent access
 public final class UserDefaultX: @unchecked Sendable {
 
     public static let standard = UserDefaultX()
