@@ -7,14 +7,14 @@ final class CacheStore: Sendable {
         let value: Any
     }
 
-    private let storage: Mutex<[String: Box]> = .init([:])
-    private let stats: Mutex<MutableStatistics> = .init(MutableStatistics())
-
-    private struct MutableStatistics: Sendable {
+    private struct State: Sendable {
+        var cache: [String: Box] = [:]
         var hits: Int = 0
         var misses: Int = 0
         var skippedWrites: Int = 0
     }
+
+    private let state: Mutex<State> = .init(State())
 
     // MARK: - Sentinel
 
@@ -23,12 +23,12 @@ final class CacheStore: Sendable {
     // MARK: - Read
 
     func get(_ key: String) -> (hit: Bool, value: Any?) {
-        storage.withLock { cache in
-            guard let box = cache[key] else {
-                stats.withLock { $0.misses += 1 }
+        state.withLock { s in
+            guard let box = s.cache[key] else {
+                s.misses += 1
                 return (hit: false, value: nil)
             }
-            stats.withLock { $0.hits += 1 }
+            s.hits += 1
             if box.value is NSNull { return (hit: true, value: nil) }
             return (hit: true, value: box.value)
         }
@@ -39,13 +39,13 @@ final class CacheStore: Sendable {
     /// Stores the value in cache and returns `true` if it differs from the cached value (i.e. a disk write is needed).
     @discardableResult
     func set(_ value: Any?, forKey key: String) -> Bool {
-        storage.withLock { cache in
+        state.withLock { s in
             let raw: Any = value ?? Self.nilSentinel
-            if let existing = cache[key], Self.isEqual(existing.value, raw) {
-                stats.withLock { $0.skippedWrites += 1 }
+            if let existing = s.cache[key], Self.isEqual(existing.value, raw) {
+                s.skippedWrites += 1
                 return false
             }
-            cache[key] = Box(value: raw)
+            s.cache[key] = Box(value: raw)
             return true
         }
     }
@@ -53,29 +53,29 @@ final class CacheStore: Sendable {
     // MARK: - Remove
 
     func remove(_ key: String) {
-        storage.withLock { $0[key] = Box(value: Self.nilSentinel) }
+        state.withLock { $0.cache[key] = Box(value: Self.nilSentinel) }
     }
 
     // MARK: - Invalidation
 
     func invalidate(_ key: String) {
-        storage.withLock { _ = $0.removeValue(forKey: key) }
+        state.withLock { _ = $0.cache.removeValue(forKey: key) }
     }
 
     func invalidateAll() {
-        storage.withLock { $0.removeAll() }
+        state.withLock { $0.cache.removeAll() }
     }
 
     // MARK: - Statistics
 
     var statistics: CacheStatistics {
-        stats.withLock { s in
+        state.withLock { s in
             CacheStatistics(hits: s.hits, misses: s.misses, skippedWrites: s.skippedWrites)
         }
     }
 
     func resetStatistics() {
-        stats.withLock { s in
+        state.withLock { s in
             s.hits = 0
             s.misses = 0
             s.skippedWrites = 0
